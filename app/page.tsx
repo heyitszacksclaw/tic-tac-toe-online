@@ -2,16 +2,20 @@ import Link from 'next/link';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[var(--color-bg)] bg-grid-pattern">
+      {/* Radial glow behind hero */}
+      <div className="fixed inset-0 bg-radial-glow pointer-events-none" />
+
       {/* Hero Section */}
-      <main className="flex-1 flex items-center justify-center px-4">
+      <main className="flex-1 flex items-center justify-center px-6 py-16 relative">
         <div className="max-w-2xl mx-auto text-center">
-          {/* Logo / Title */}
-          <div className="mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] mb-6">
+
+          {/* Logo / Icon */}
+          <div className="mb-10">
+            <div className="inline-flex items-center justify-center w-28 h-28 rounded-3xl bg-[var(--color-surface)] border border-[var(--color-border-strong)] mb-8 shadow-[var(--shadow-md)]" style={{boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.1)'}}>
               <svg
-                width="40"
-                height="40"
+                width="58"
+                height="58"
                 viewBox="0 0 40 40"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
@@ -30,66 +34,87 @@ export default function LandingPage() {
                 <line x1="14" y1="28" x2="6" y2="36" stroke="var(--color-x)" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
               </svg>
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+
+            <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-5 leading-tight">
               Tic Tac Toe
-              <span className="block text-[var(--color-primary)]">Online</span>
+              <span className="block text-[var(--color-primary)] text-glow-primary">
+                Online
+              </span>
             </h1>
-            <p className="text-lg text-[var(--color-text-muted)] max-w-md mx-auto leading-relaxed">
-              Challenge friends to real-time matches. Create a room, share the code, and play instantly.
+            <p className="text-lg sm:text-xl text-[var(--color-text-muted)] max-w-lg mx-auto leading-relaxed">
+              Challenge friends to real-time matches — no setup needed.
+              Create a private room, share the code, and start playing in seconds.
             </p>
           </div>
 
           {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
             <Link
               href="/signup"
-              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-medium transition-colors duration-150 text-base"
+              className="btn-primary w-full sm:w-auto text-base"
             >
-              Get Started
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M9 2v14M2 9h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+              Get Started — It&apos;s Free
             </Link>
             <Link
               href="/login"
-              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)] border border-[var(--color-border)] text-[var(--color-text)] font-medium transition-colors duration-150 text-base"
+              className="btn-secondary w-full sm:w-auto text-base"
             >
               Sign In
             </Link>
           </div>
 
-          {/* Feature hints */}
-          <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 text-sm text-[var(--color-text-muted)]">
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-10 h-10 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path d="M13 3L7 10l6 7" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" transform="rotate(180 10 10)" />
-                  <circle cx="10" cy="10" r="8" stroke="var(--color-accent)" strokeWidth="1.5" fill="none" opacity="0.3" />
+          {/* Feature cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            {/* Real-time */}
+            <div className="card-elevated flex flex-col items-center gap-4 py-7 px-5 group hover:border-[var(--color-accent)] transition-colors duration-200">
+              <div className="w-14 h-14 rounded-2xl bg-[var(--color-accent-dim)] border border-[var(--color-accent)]/20 flex items-center justify-center group-hover:border-[var(--color-accent)]/50 transition-colors">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="var(--color-accent)" strokeWidth="1.5" fill="none" opacity="0.4" />
+                  <path d="M12 7v5l3.5 3.5" stroke="var(--color-accent)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-              <span>Real-time gameplay</span>
+              <div className="text-center">
+                <p className="text-[var(--color-text)] font-semibold text-sm mb-1.5">Real-time gameplay</p>
+                <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">Moves sync instantly between players — no refresh needed</p>
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-10 h-10 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <rect x="3" y="3" width="14" height="14" rx="3" stroke="var(--color-primary)" strokeWidth="1.5" fill="none" />
-                  <path d="M7 10l2 2 4-4" stroke="var(--color-primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+
+            {/* Private rooms */}
+            <div className="card-elevated flex flex-col items-center gap-4 py-7 px-5 group hover:border-[var(--color-primary)] transition-colors duration-200">
+              <div className="w-14 h-14 rounded-2xl bg-[var(--color-primary-dim)] border border-[var(--color-primary)]/20 flex items-center justify-center group-hover:border-[var(--color-primary)]/50 transition-colors">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2" stroke="var(--color-primary)" strokeWidth="1.5" />
+                  <path d="M7 11V7a5 5 0 0110 0v4" stroke="var(--color-primary)" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               </div>
-              <span>Private room codes</span>
+              <div className="text-center">
+                <p className="text-[var(--color-text)] font-semibold text-sm mb-1.5">Private room codes</p>
+                <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">6-character codes keep your match private and invite-only</p>
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-10 h-10 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path d="M10 3v14M3 10h14" stroke="var(--color-success)" strokeWidth="1.5" strokeLinecap="round" />
+
+            {/* Stats */}
+            <div className="card-elevated flex flex-col items-center gap-4 py-7 px-5 group hover:border-[var(--color-success)] transition-colors duration-200">
+              <div className="w-14 h-14 rounded-2xl bg-[var(--color-success-dim)] border border-[var(--color-success)]/20 flex items-center justify-center group-hover:border-[var(--color-success)]/50 transition-colors">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M8 18V10M12 18V4M16 18v-6" stroke="var(--color-success)" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </div>
-              <span>Track your stats</span>
+              <div className="text-center">
+                <p className="text-[var(--color-text)] font-semibold text-sm mb-1.5">Track your stats</p>
+                <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">Wins, losses, and draws tracked across every match you play</p>
+              </div>
             </div>
           </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="py-6 text-center text-xs text-[var(--color-text-muted)]">
-        <p>Built with Next.js & Supabase — No cost, no ads, just fun.</p>
+      <footer className="py-8 text-center text-xs text-[var(--color-text-subtle)] relative">
+        <p>Built with Next.js &amp; Supabase — No cost, no ads, just fun.</p>
       </footer>
     </div>
   );

@@ -249,27 +249,31 @@ export default function RoomClient({
   const displayCode = `${roomCode.slice(0, 3)} ${roomCode.slice(3)}`;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[var(--color-bg)]">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[var(--color-border)]">
+      <header className="flex items-center justify-between px-5 sm:px-8 py-4 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 40 40" fill="none">
+          <div className="w-9 h-9 rounded-xl bg-[var(--color-primary-dim)] border border-[var(--color-primary)]/20 flex items-center justify-center">
+            <svg width="18" height="18" viewBox="0 0 40 40" fill="none" aria-hidden="true">
               <line x1="4" y1="4" x2="16" y2="16" stroke="var(--color-x)" strokeWidth="3" strokeLinecap="round" />
               <line x1="16" y1="4" x2="4" y2="16" stroke="var(--color-x)" strokeWidth="3" strokeLinecap="round" />
               <circle cx="30" cy="10" r="7" stroke="var(--color-o)" strokeWidth="3" fill="none" />
             </svg>
           </div>
-          <span className="text-sm font-semibold">Tic Tac Toe Online</span>
+          <span className="text-sm font-bold tracking-tight">Tic Tac Toe Online</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-[var(--color-text-muted)] hidden sm:inline">
-            {status === 'waiting' ? 'Waiting for opponent...' : status === 'ready' ? 'Ready to play' : status}
+        <div className="flex items-center gap-2.5">
+          <span className={`text-xs font-medium hidden sm:inline ${status === 'ready' ? 'text-[var(--color-success)]' : 'text-[var(--color-warning)]'}`}>
+            {status === 'waiting' ? 'Waiting for opponent' : status === 'ready' ? 'Ready to play' : status}
           </span>
           <div
-            className={`w-2 h-2 rounded-full ${
+            className={`w-2.5 h-2.5 rounded-full ${
               status === 'ready' ? 'bg-[var(--color-success)]' : 'bg-[var(--color-warning)]'
             }`}
+            style={status === 'ready'
+              ? { boxShadow: '0 0 6px var(--color-success)' }
+              : { boxShadow: '0 0 6px var(--color-warning)' }
+            }
           />
         </div>
       </header>
@@ -282,7 +286,7 @@ export default function RoomClient({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-sm shadow-lg"
+            className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-medium shadow-[var(--shadow-lg)]"
           >
             {toast}
           </motion.div>
@@ -290,8 +294,8 @@ export default function RoomClient({
       </AnimatePresence>
 
       {/* Main */}
-      <main className="flex-1 flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-lg space-y-8">
+      <main className="flex-1 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-lg space-y-10">
 
           {/* Room Code Display */}
           <motion.div
@@ -300,25 +304,27 @@ export default function RoomClient({
             transition={{ duration: 0.3 }}
             className="text-center"
           >
-            <p className="text-xs uppercase tracking-widest text-[var(--color-text-muted)] mb-3 font-medium">
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--color-text-muted)] mb-4 font-semibold">
               Room Code
             </p>
-            <div className="inline-flex items-center gap-3">
-              <span className="text-4xl sm:text-5xl font-mono font-bold tracking-wider text-[var(--color-text)]">
+            <div className="inline-flex items-center gap-4 mb-4">
+              <span className="text-5xl sm:text-6xl font-mono font-bold tracking-wider text-[var(--color-text)]"
+                style={{ letterSpacing: '0.12em' }}
+              >
                 {displayCode}
               </span>
               <div className="relative">
                 <button
                   onClick={handleCopyCode}
-                  className="p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-colors"
+                  className="p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-strong)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-dim)] transition-all"
                   title="Copy room code"
                 >
                   {copied ? (
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[var(--color-success)]">
+                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="text-[var(--color-success)]">
                       <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   ) : (
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[var(--color-text-muted)]">
+                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="text-[var(--color-text-muted)]">
                       <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
                       <path d="M11 5V3.5A1.5 1.5 0 009.5 2H3.5A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
@@ -330,7 +336,7 @@ export default function RoomClient({
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="absolute -bottom-7 left-1/2 -translate-x-1/2 text-xs text-[var(--color-success)] whitespace-nowrap"
+                      className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs text-[var(--color-success)] whitespace-nowrap font-medium"
                     >
                       Copied!
                     </motion.span>
@@ -338,7 +344,7 @@ export default function RoomClient({
                 </AnimatePresence>
               </div>
             </div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-4">
+            <p className="text-sm text-[var(--color-text-muted)]">
               Share this code with your opponent to let them join
             </p>
           </motion.div>
@@ -349,6 +355,8 @@ export default function RoomClient({
             <PlayerCard
               player={player1}
               label="Player 1"
+              mark="X"
+              markColor="var(--color-x)"
               isCurrentUser={player1?.id === currentUser.id}
               isCreator={player1?.id === creatorId}
               delay={0.1}
@@ -357,6 +365,8 @@ export default function RoomClient({
             <PlayerCard
               player={player2}
               label="Player 2"
+              mark="O"
+              markColor="var(--color-o)"
               isCurrentUser={player2?.id === currentUser.id}
               isCreator={player2?.id === creatorId}
               isWaiting={!player2}
@@ -372,11 +382,11 @@ export default function RoomClient({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex items-center justify-center gap-2 text-sm text-[var(--color-text-muted)]"
+                className="flex items-center justify-center gap-3 py-4 px-5 rounded-2xl bg-[var(--color-warning-dim)] border border-[var(--color-warning)]/20 text-sm text-[var(--color-warning)] font-medium"
               >
-                <span className="relative flex h-2 w-2">
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-warning)] opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--color-warning)]"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--color-warning)]"></span>
                 </span>
                 Waiting for opponent to join...
               </motion.div>
@@ -387,11 +397,11 @@ export default function RoomClient({
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex items-center justify-center gap-2 text-sm text-[var(--color-success)]"
+                className="flex items-center justify-center gap-3 py-4 px-5 rounded-2xl bg-[var(--color-success-dim)] border border-[var(--color-success)]/20 text-sm text-[var(--color-success)] font-medium"
               >
-                <span className="relative flex h-2 w-2">
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--color-success)] opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--color-success)]"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--color-success)]"></span>
                 </span>
                 Both players present — ready to play!
               </motion.div>
@@ -403,7 +413,7 @@ export default function RoomClient({
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center"
+              className="p-4 rounded-xl bg-[var(--color-danger-dim)] border border-[var(--color-danger)]/20 text-[var(--color-danger)] text-sm text-center"
             >
               {error}
             </motion.div>
@@ -419,7 +429,8 @@ export default function RoomClient({
                 transition={{ delay: 0.3 }}
                 onClick={handleStartGame}
                 disabled={!canStartGame || loading === 'start'}
-                className="w-full px-6 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed text-base"
+                className="btn-primary w-full text-base py-5 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+                style={{ fontSize: '1.0625rem' }}
               >
                 {loading === 'start' ? (
                   <span className="flex items-center justify-center gap-2">
@@ -427,7 +438,12 @@ export default function RoomClient({
                     Starting game...
                   </span>
                 ) : (
-                  'Start Game'
+                  <>
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+                      <polygon points="8,4 18,11 8,18" fill="currentColor" />
+                    </svg>
+                    Start Game
+                  </>
                 )}
               </motion.button>
             )}
@@ -451,7 +467,7 @@ export default function RoomClient({
               transition={{ delay: 0.4 }}
               onClick={handleLeaveRoom}
               disabled={loading === 'leave'}
-              className="w-full px-6 py-3 rounded-xl bg-transparent hover:bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              className="w-full px-6 py-3.5 rounded-xl bg-transparent hover:bg-[var(--color-danger-dim)] border border-[var(--color-border)] hover:border-[var(--color-danger)]/30 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
               {loading === 'leave' ? (
                 <span className="flex items-center justify-center gap-2">
@@ -473,6 +489,8 @@ export default function RoomClient({
 function PlayerCard({
   player,
   label,
+  mark,
+  markColor,
   isCurrentUser,
   isCreator,
   isWaiting = false,
@@ -480,6 +498,8 @@ function PlayerCard({
 }: {
   player: PlayerProfile | null;
   label: string;
+  mark: string;
+  markColor: string;
   isCurrentUser: boolean;
   isCreator: boolean;
   isWaiting?: boolean;
@@ -490,55 +510,65 @@ function PlayerCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.3 }}
-      className={`p-4 rounded-xl border transition-colors ${
+      className={`p-5 rounded-2xl border transition-colors ${
         isWaiting
-          ? 'bg-[var(--color-surface)]/50 border-[var(--color-border)] border-dashed'
+          ? 'bg-[var(--color-surface)]/40 border-[var(--color-border)] border-dashed'
           : isCurrentUser
-          ? 'bg-[var(--color-primary)]/5 border-[var(--color-primary)]/30'
-          : 'bg-[var(--color-surface)] border-[var(--color-border)]'
+          ? 'bg-[var(--color-primary)]/8 border-[var(--color-primary)]/30'
+          : 'bg-[var(--color-surface)] border-[var(--color-border-strong)]'
       }`}
+      style={isCurrentUser && !isWaiting ? { background: 'rgba(99,102,241,0.07)' } : undefined}
     >
       {isWaiting ? (
-        <div className="text-center py-4">
-          <div className="w-10 h-10 rounded-full bg-[var(--color-surface)] border border-dashed border-[var(--color-border)] flex items-center justify-center mx-auto mb-3">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[var(--color-text-muted)]">
+        <div className="text-center py-6">
+          <div className="w-14 h-14 rounded-2xl bg-[var(--color-surface)] border border-dashed border-[var(--color-border-strong)] flex items-center justify-center mx-auto mb-4">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-[var(--color-text-subtle)]" aria-hidden="true">
               <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
-          <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">Waiting...</p>
+          <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-1">{label}</p>
+          <p className="text-xs text-[var(--color-text-subtle)]">Waiting...</p>
         </div>
       ) : (
         <>
-          {/* Avatar */}
-          <div className="flex items-center gap-3 mb-3">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                isCurrentUser
-                  ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
-                  : 'bg-[var(--color-surface-light)] text-[var(--color-text-muted)]'
-              }`}
-            >
-              {player?.display_name?.[0]?.toUpperCase() || '?'}
+          {/* Avatar + Mark */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative">
+              <div
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center text-base font-bold flex-shrink-0 ${
+                  isCurrentUser
+                    ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
+                    : 'bg-[var(--color-surface-light)] text-[var(--color-text-muted)]'
+                }`}
+              >
+                {player?.display_name?.[0]?.toUpperCase() || '?'}
+              </div>
+              {/* Mark badge */}
+              <span
+                className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-black border-2 border-[var(--color-bg)]"
+                style={{ background: markColor, color: '#0a0a0f' }}
+              >
+                {mark}
+              </span>
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-sm font-semibold truncate">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                <span className="text-sm font-bold truncate">
                   {player?.display_name || 'Player'}
                 </span>
                 {isCurrentUser && (
-                  <span className="text-xs text-[var(--color-primary)] font-medium shrink-0">you</span>
+                  <span className="text-xs bg-[var(--color-primary-dim)] text-[var(--color-primary)] font-semibold px-1.5 py-0.5 rounded-md shrink-0">you</span>
                 )}
                 {isCreator && (
-                  <span className="text-xs text-[var(--color-warning)] font-medium shrink-0">host</span>
+                  <span className="text-xs bg-[var(--color-warning-dim)] text-[var(--color-warning)] font-semibold px-1.5 py-0.5 rounded-md shrink-0">host</span>
                 )}
               </div>
-              <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
+              <p className="text-xs text-[var(--color-text-subtle)]">{label}</p>
             </div>
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-1 text-center">
+          <div className="grid grid-cols-3 gap-2 text-center">
             <StatBadge label="W" value={player?.wins ?? 0} color="var(--color-success)" />
             <StatBadge label="L" value={player?.losses ?? 0} color="var(--color-danger)" />
             <StatBadge label="D" value={player?.draws ?? 0} color="var(--color-warning)" />
@@ -551,18 +581,18 @@ function PlayerCard({
 
 function StatBadge({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="px-1 py-1.5 rounded-lg bg-[var(--color-bg)]/60">
-      <p className="text-xs font-bold" style={{ color }}>{value}</p>
-      <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
+    <div className="px-2 py-2.5 rounded-xl bg-[var(--color-bg)]/70 border border-[var(--color-border)]/50">
+      <p className="text-sm font-bold" style={{ color }}>{value}</p>
+      <p className="text-xs text-[var(--color-text-subtle)] font-medium">{label}</p>
     </div>
   );
 }
 
 function LoadingSpinner() {
   return (
-    <svg className="animate-spin" width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
-      <path d="M7 2a5 5 0 015 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <svg className="animate-spin" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
+      <path d="M8 2a6 6 0 016 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
