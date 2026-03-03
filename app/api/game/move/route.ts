@@ -30,14 +30,14 @@ async function incrementStat(
 ) {
   const { data: profile } = await admin
     .from('profiles')
-    .select(stat)
+    .select('wins, losses, draws')
     .eq('id', userId)
     .single();
 
   if (profile) {
     await admin
       .from('profiles')
-      .update({ [stat]: ((profile[stat] as number) ?? 0) + 1 })
+      .update({ [stat]: ((profile as Record<string, number>)[stat] ?? 0) + 1 })
       .eq('id', userId);
   }
 }
