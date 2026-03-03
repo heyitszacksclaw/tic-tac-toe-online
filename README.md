@@ -1,45 +1,39 @@
 # Tic Tac Toe Online
 
-Real-time multiplayer Tic Tac Toe built with Next.js 15, Supabase, and deployed on Vercel.
+A real-time multiplayer Tic Tac Toe game built with Next.js 15, Supabase, and deployed on Vercel.
 
 ## Tech Stack
 
-- **Frontend:** Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS
-- **Auth:** Supabase Auth (Email/Password, Google OAuth, GitHub OAuth)
-- **Database:** Supabase PostgreSQL with Row Level Security
-- **Real-Time:** Supabase Realtime (WebSocket)
-- **Rate Limiting:** Upstash Redis
-- **Hosting:** Vercel (Hobby tier)
-- **Animations:** CSS Keyframes + Framer Motion
+- **Frontend:** Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS, Framer Motion
+- **Backend:** Supabase (Auth, PostgreSQL, Realtime)
+- **Deployment:** Vercel (auto-deploy from GitHub)
 
-## Features
+## Features (In Progress)
 
-- Real-time multiplayer gameplay
-- Private room codes for playing with friends
-- Google & GitHub OAuth sign-in
-- 30-second turn timers
-- Win/loss/draw stats tracking
-- Sound effects & animations
-- Keyboard accessible
-- Mobile responsive
+- [x] Email/password authentication
+- [x] OAuth (Google, GitHub) — UI ready, providers need configuration
+- [x] Animated landing page
+- [x] Protected routes with middleware
+- [x] User profiles with display names
+- [ ] Room management & lobby
+- [ ] Real-time gameplay
+- [ ] Post-game features (rematch, forfeit)
+- [ ] Audio & visual polish
+- [ ] Rate limiting & security hardening
 
-## Development
+## Getting Started
 
 ```bash
 npm install
+cp .env.local.example .env.local
+# Fill in your Supabase credentials
 npm run dev
 ```
 
 ## Environment Variables
 
-Create a `.env.local` file:
-
-```
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-## License
-
-MIT
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous/public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-only) |
