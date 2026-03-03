@@ -155,7 +155,7 @@ export default function GameBoard({
         const state = channel.presenceState();
         const map: Record<string, boolean> = {};
         for (const presences of Object.values(state)) {
-          for (const p of presences as Array<{ userId: string }>) {
+          for (const p of presences as unknown as Array<{ userId: string }>) {
             map[p.userId] = true;
           }
         }
