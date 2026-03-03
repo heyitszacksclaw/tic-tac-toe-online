@@ -1,0 +1,169 @@
+'use client';
+
+import { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
+export default function SignUpPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const supabase = createClient();
+
+  async function handleEmailSignUp(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    if (!email.trim()) {
+      setError('Please enter your email address.');
+      setLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      setLoading(false);
+      return;
+    }
+
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (signUpError) {
+      setError(signUpError.message);
+      setLoading(false);
+      return;
+    }
+
+    router.push('/home');
+    router.refresh();
+  }
+
+  async function handleOAuth(provider: 'google' | 'github') {
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (oauthError) {
+      setError(oauthError.message);
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-block mb-4 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors text-sm">
+            ← Back to home
+          </Link>
+          <h1 className="text-2xl font-bold">Create your account</h1>
+          <p className="text-[var(--color-text-muted)] mt-2 text-sm">
+            Sign up to start playing
+          </p>
+        </div>
+
+        {/* OAuth Buttons */}
+        <div className="space-y-3 mb-6">
+          <button
+            onClick={() => handleOAuth('google')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)] border border-[var(--color-border)] transition-colors text-sm font-medium"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18">
+              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4" />
+              <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853" />
+              <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.997 8.997 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05" />
+              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z" fill="#EA4335" />
+            </svg>
+            Continue with Google
+          </button>
+
+          <button
+            onClick={() => handleOAuth('github')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-light)] border border-[var(--color-border)] transition-colors text-sm font-medium"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+              <path d="M9 0C4.03 0 0 4.03 0 9c0 3.98 2.58 7.35 6.16 8.54.45.08.62-.2.62-.43v-1.5c-2.5.54-3.04-1.21-3.04-1.21-.41-1.04-1-1.32-1-1.32-.82-.56.06-.55.06-.55.9.06 1.38.93 1.38.93.8 1.37 2.1.98 2.62.75.08-.58.31-.98.57-1.2-2-.23-4.1-1-4.1-4.46 0-.98.35-1.79.93-2.42-.09-.23-.4-1.15.09-2.39 0 0 .76-.24 2.48.93a8.63 8.63 0 0 1 4.52 0c1.72-1.17 2.48-.93 2.48-.93.49 1.24.18 2.16.09 2.39.58.63.93 1.44.93 2.42 0 3.47-2.1 4.23-4.11 4.45.32.28.61.83.61 1.67v2.48c0 .24.16.52.62.43C15.42 16.35 18 12.98 18 9c0-4.97-4.03-9-9-9Z" />
+            </svg>
+            Continue with GitHub
+          </button>
+        </div>
+
+        <div className="relative mb-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-[var(--color-border)]"></div>
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="px-2 bg-[var(--color-bg)] text-[var(--color-text-muted)]">
+              or sign up with email
+            </span>
+          </div>
+        </div>
+
+        {/* Email/Password Form */}
+        <form onSubmit={handleEmailSignUp} className="space-y-4">
+          <div>
+            <label htmlFor="email" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none transition-colors text-sm"
+              placeholder="you@example.com"
+              required
+              autoComplete="email"
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none transition-colors text-sm"
+              placeholder="At least 6 characters"
+              required
+              minLength={6}
+              autoComplete="new-password"
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {loading ? 'Creating account...' : 'Create account'}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-[var(--color-text-muted)]">
+          Already have an account?{' '}
+          <Link href="/login" className="text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}
