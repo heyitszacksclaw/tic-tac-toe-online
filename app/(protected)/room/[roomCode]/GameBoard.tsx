@@ -104,6 +104,7 @@ export default function GameBoard({
   const [error, setError] = useState<string | null>(null);
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({});
   const [lastPlayedSound, setLastPlayedSound] = useState<string | null>(null);
+  const [myTurnTimedOut, setMyTurnTimedOut] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutClaimedRef = useRef(false);
@@ -118,7 +119,7 @@ export default function GameBoard({
   const isPlayerO = currentUser.id === game.player_o;
   const myMark = isPlayerX ? 'X' : 'O';
   const opponentMark = isPlayerX ? 'O' : 'X';
-  const isMyTurn = !isGameOver && gameState.currentTurn === myMark;
+  const isMyTurn = !isGameOver && !myTurnTimedOut && gameState.currentTurn === myMark;
   const isOpponentTurn = !isGameOver && gameState.currentTurn === opponentMark;
 
   const myProfile = isPlayerX ? playerX : playerO;
@@ -183,10 +184,12 @@ export default function GameBoard({
   useEffect(() => {
     if (isGameOver) {
       if (timerRef.current) clearInterval(timerRef.current);
+      setMyTurnTimedOut(false);
       return;
     }
 
     timeoutClaimedRef.current = false;
+    setMyTurnTimedOut(false);
 
     const updateTimer = () => {
       const deadline = new Date(game.turn_deadline);
@@ -194,10 +197,17 @@ export default function GameBoard({
       const remaining = Math.max(0, Math.ceil((deadline.getTime() - now.getTime()) / 1000));
       setTimeLeft(remaining);
 
-      // Claim timeout when timer hits 0 and it's NOT our turn (TURN-6)
-      if (remaining === 0 && isOpponentTurn && !timeoutClaimedRef.current) {
+      if (remaining === 0 && !timeoutClaimedRef.current) {
         timeoutClaimedRef.current = true;
-        claimTimeout();
+
+        if (isOpponentTurn) {
+          // Opponent's turn expired — claim the timeout win
+          claimTimeout();
+        } else if (gameState.currentTurn === myMark) {
+          // Our own turn expired — show "timed out" state and wait
+          // for the opponent's client to claim the timeout
+          setMyTurnTimedOut(true);
+        }
       }
     };
 
@@ -208,7 +218,7 @@ export default function GameBoard({
       if (timerRef.current) clearInterval(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.turn_deadline, isGameOver, isOpponentTurn]);
+  }, [game.turn_deadline, isGameOver, isOpponentTurn, gameState.currentTurn, myMark]);
 
   // ─── Sound effects ────────────────────────────────────────────────────────
 
@@ -268,13 +278,24 @@ export default function GameBoard({
 
   const claimTimeout = useCallback(async () => {
     try {
-      await fetch('/api/game/timeout', {
+      const res = await fetch('/api/game/timeout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gameId: game.id }),
       });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Unknown error' }));
+        // If the game is already completed or has a winner, the realtime
+        // subscription will pick up the final state — no action needed.
+        if (res.status === 409) return;
+        console.error('Timeout claim failed:', data.error);
+        // Allow retry on next interval tick
+        timeoutClaimedRef.current = false;
+      }
     } catch {
-      // Ignore — server will handle it
+      // Network error — allow retry on next interval tick
+      timeoutClaimedRef.current = false;
     }
   }, [game.id]);
 
@@ -420,7 +441,7 @@ export default function GameBoard({
                     onClick={onGameEnd}
                     className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-semibold hover:bg-[var(--color-surface-hover)] transition-colors"
                   >
-                    Continue
+                    Back to Home
                   </button>
                 )}
               </motion.div>
@@ -428,7 +449,27 @@ export default function GameBoard({
           </AnimatePresence>
 
           {/* Turn indicator + timer */}
-          {!isGameOver && (
+          {!isGameOver && myTurnTimedOut && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="flex items-center justify-center gap-3 px-5 py-4 rounded-2xl border text-center"
+              style={{
+                background: 'color-mix(in srgb, var(--color-danger) 8%, var(--color-surface))',
+                borderColor: 'color-mix(in srgb, var(--color-danger) 25%, transparent)',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <circle cx="7" cy="7" r="6" stroke="var(--color-danger)" strokeWidth="1.5" />
+                <path d="M7 4v3.5l2 1.5" stroke="var(--color-danger)" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span className="text-sm font-semibold" style={{ color: 'var(--color-danger)' }}>
+                Time ran out — You lose!
+              </span>
+            </motion.div>
+          )}
+          {!isGameOver && !myTurnTimedOut && (
             <motion.div
               key={gameState.currentTurn}
               initial={{ opacity: 0, y: 6 }}

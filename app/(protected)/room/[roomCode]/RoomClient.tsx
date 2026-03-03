@@ -304,9 +304,14 @@ export default function RoomClient({
     }
   }
 
-  function handleGameEnd() {
-    // Transition back to post-game: refresh to get updated room/game state
-    router.refresh();
+  async function handleGameEnd() {
+    // Since rematch (M4) isn't implemented yet, leave the room and go home
+    try {
+      await fetch('/api/rooms/leave', { method: 'POST' });
+    } catch {
+      // Best-effort leave — navigate home regardless
+    }
+    router.push('/home');
   }
 
   // ─── Render game board when playing ────────────────────────────────────────
@@ -435,8 +440,6 @@ export default function RoomClient({
             <PlayerCard
               player={player1}
               label="Player 1"
-              mark="X"
-              markColor="var(--color-x)"
               isCurrentUser={player1?.id === currentUser.id}
               isCreator={player1?.id === creatorId}
               delay={0.1}
@@ -445,8 +448,6 @@ export default function RoomClient({
             <PlayerCard
               player={player2}
               label="Player 2"
-              mark="O"
-              markColor="var(--color-o)"
               isCurrentUser={player2?.id === currentUser.id}
               isCreator={player2?.id === creatorId}
               isWaiting={!player2}
@@ -579,8 +580,8 @@ function PlayerCard({
 }: {
   player: PlayerProfile | null;
   label: string;
-  mark: string;
-  markColor: string;
+  mark?: string;
+  markColor?: string;
   isCurrentUser: boolean;
   isCreator: boolean;
   isWaiting?: boolean;
@@ -624,13 +625,15 @@ function PlayerCard({
               >
                 {player?.display_name?.[0]?.toUpperCase() || '?'}
               </div>
-              {/* Mark badge */}
-              <span
-                className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-black border-2 border-[var(--color-bg)]"
-                style={{ background: markColor, color: '#0a0a0f' }}
-              >
-                {mark}
-              </span>
+              {/* Mark badge — only shown when mark is assigned (during game, not lobby) */}
+              {mark && markColor && (
+                <span
+                  className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-black border-2 border-[var(--color-bg)]"
+                  style={{ background: markColor, color: '#0a0a0f' }}
+                >
+                  {mark}
+                </span>
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
