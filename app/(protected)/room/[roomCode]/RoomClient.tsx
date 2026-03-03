@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import GameBoard from './GameBoard';
 
 interface PlayerProfile {
   id: string;
@@ -11,6 +12,25 @@ interface PlayerProfile {
   wins: number;
   losses: number;
   draws: number;
+}
+
+interface GameData {
+  id: string;
+  room_id: string;
+  player_x: string;
+  player_o: string;
+  game_state: {
+    board: (string | null)[];
+    currentTurn: string;
+    moveCount: number;
+    winningLine: number[] | null;
+    lastMoveIndex: number | null;
+    lastMoveTimestamp: string | null;
+  };
+  status: string;
+  winner_id: string | null;
+  win_reason: string | null;
+  turn_deadline: string;
 }
 
 interface RoomClientProps {
@@ -21,6 +41,9 @@ interface RoomClientProps {
   currentUser: { id: string; displayName: string };
   initialPlayer1: PlayerProfile | null;
   initialPlayer2: PlayerProfile | null;
+  initialGame: GameData | null;
+  playerXProfile: PlayerProfile | null;
+  playerOProfile: PlayerProfile | null;
 }
 
 export default function RoomClient({
@@ -31,10 +54,16 @@ export default function RoomClient({
   currentUser,
   initialPlayer1,
   initialPlayer2,
+  initialGame,
+  playerXProfile,
+  playerOProfile,
 }: RoomClientProps) {
   const [player1, setPlayer1] = useState<PlayerProfile | null>(initialPlayer1);
   const [player2, setPlayer2] = useState<PlayerProfile | null>(initialPlayer2);
   const [status, setStatus] = useState(roomStatus);
+  const [game, setGame] = useState<GameData | null>(initialGame);
+  const [xProfile, setXProfile] = useState<PlayerProfile | null>(playerXProfile);
+  const [oProfile, setOProfile] = useState<PlayerProfile | null>(playerOProfile);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,10 +81,38 @@ export default function RoomClient({
     setTimeout(() => setToast(null), 3000);
   }, []);
 
+  // Fetch current game data
+  const fetchGame = useCallback(async () => {
+    const supabaseClient = createClient();
+    const { data: gameRow } = await supabaseClient
+      .from('games')
+      .select(
+        'id, room_id, player_x, player_o, game_state, status, winner_id, win_reason, turn_deadline'
+      )
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!gameRow) return;
+
+    setGame(gameRow);
+
+    // Fetch player profiles for X and O
+    const ids = [gameRow.player_x, gameRow.player_o].filter(Boolean) as string[];
+    const { data: gameProfiles } = await supabaseClient
+      .from('profiles')
+      .select('id, display_name, wins, losses, draws')
+      .in('id', ids);
+
+    if (gameProfiles) {
+      setXProfile(gameProfiles.find((p) => p.id === gameRow.player_x) ?? null);
+      setOProfile(gameProfiles.find((p) => p.id === gameRow.player_o) ?? null);
+    }
+  }, [roomId]);
+
   // Refresh room data from DB
   const refreshRoom = useCallback(async () => {
-    const res = await fetch(`/api/rooms/validate?code=${roomCode}`);
-    // Also fetch fresh player data
     const supabaseClient = createClient();
     const { data: room } = await supabaseClient
       .from('rooms')
@@ -86,7 +143,6 @@ export default function RoomClient({
     } else {
       setPlayer2(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
 
   // Realtime subscription
@@ -104,15 +160,15 @@ export default function RoomClient({
         showToast('Room is closing...');
         setTimeout(() => router.push('/home'), 1500);
       })
-      .on('broadcast', { event: 'game_starting' }, () => {
-        // Refresh the page to pick up the new game state
-        router.refresh();
+      .on('broadcast', { event: 'game_starting' }, async () => {
+        await fetchGame();
+        setStatus('playing');
       })
       .on('presence', { event: 'sync' }, () => {
         // Presence state available via channel.presenceState()
       })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
+      .subscribe(async (subStatus) => {
+        if (subStatus === 'SUBSCRIBED') {
           await channel.track({
             userId: currentUser.id,
             displayName: currentUser.displayName,
@@ -149,6 +205,8 @@ export default function RoomClient({
             setTimeout(() => router.push('/home'), 1500);
           } else if (newStatus === 'ready') {
             await refreshRoom();
+          } else if (newStatus === 'playing' || newStatus === 'post_game') {
+            await fetchGame();
           }
         }
       )
@@ -166,7 +224,6 @@ export default function RoomClient({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Fallback
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     }
@@ -237,13 +294,36 @@ export default function RoomClient({
         });
       }
 
-      // Refresh the room page to enter game state
-      router.refresh();
+      // Fetch game and update state
+      await fetchGame();
+      setStatus('playing');
+      setLoading(null);
     } catch {
       setError('Something went wrong. Please try again.');
       setLoading(null);
     }
   }
+
+  function handleGameEnd() {
+    // Transition back to post-game: refresh to get updated room/game state
+    router.refresh();
+  }
+
+  // ─── Render game board when playing ────────────────────────────────────────
+
+  if ((status === 'playing' || status === 'post_game') && game && xProfile && oProfile) {
+    return (
+      <GameBoard
+        game={game}
+        currentUser={currentUser}
+        playerX={xProfile}
+        playerO={oProfile}
+        onGameEnd={handleGameEnd}
+      />
+    );
+  }
+
+  // ─── Lobby UI ─────────────────────────────────────────────────────────────
 
   // Format room code with space in middle (e.g., "AB3 K9F")
   const displayCode = `${roomCode.slice(0, 3)} ${roomCode.slice(3)}`;
@@ -485,7 +565,8 @@ export default function RoomClient({
   );
 }
 
-// Player card component
+// ─── Player Card ──────────────────────────────────────────────────────────────
+
 function PlayerCard({
   player,
   label,

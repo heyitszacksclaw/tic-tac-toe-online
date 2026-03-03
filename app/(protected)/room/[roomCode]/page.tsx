@@ -44,9 +44,6 @@ export default async function RoomPage({ params }: RoomPageProps) {
     redirect('/home');
   }
 
-  // If game is already playing, redirect to game page (future milestone)
-  // For now, stay on room page
-
   // Fetch player profiles
   const playerIds = [room.player1_id, room.player2_id].filter(Boolean) as string[];
   const { data: profiles } = await admin
@@ -64,6 +61,36 @@ export default async function RoomPage({ params }: RoomPageProps) {
     .eq('id', user.id)
     .single();
 
+  // If game is active/post_game, fetch the game data so we can pass it to the client
+  let activeGame = null;
+  if (room.status === 'playing' || room.status === 'post_game') {
+    const { data: game } = await admin
+      .from('games')
+      .select(
+        'id, room_id, player_x, player_o, game_state, status, winner_id, win_reason, turn_deadline'
+      )
+      .eq('room_id', room.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    activeGame = game ?? null;
+  }
+
+  // Fetch profiles for X and O if game exists
+  let playerXProfile = null;
+  let playerOProfile = null;
+  if (activeGame) {
+    const allProfileIds = [activeGame.player_x, activeGame.player_o].filter(Boolean) as string[];
+    const { data: gameProfiles } = await admin
+      .from('profiles')
+      .select('id, display_name, wins, losses, draws')
+      .in('id', allProfileIds);
+
+    playerXProfile = gameProfiles?.find((p) => p.id === activeGame.player_x) ?? null;
+    playerOProfile = gameProfiles?.find((p) => p.id === activeGame.player_o) ?? null;
+  }
+
   return (
     <RoomClient
       roomCode={room.room_code}
@@ -73,6 +100,9 @@ export default async function RoomPage({ params }: RoomPageProps) {
       currentUser={{ id: user.id, displayName: currentProfile?.display_name || 'Player' }}
       initialPlayer1={player1}
       initialPlayer2={player2}
+      initialGame={activeGame}
+      playerXProfile={playerXProfile}
+      playerOProfile={playerOProfile}
     />
   );
 }
