@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
@@ -24,12 +24,34 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [activeRoom, setActiveRoom] = useState<{ roomCode: string; roomId: string } | null>(null);
+  const [activeRoomLoading, setActiveRoomLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
 
   const wins = profile?.wins ?? 0;
   const losses = profile?.losses ?? 0;
   const draws = profile?.draws ?? 0;
+
+  // On mount, check for active room
+  useEffect(() => {
+    async function checkActiveRoom() {
+      try {
+        const res = await fetch('/api/user/active-room');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.roomCode) {
+            setActiveRoom({ roomCode: data.roomCode, roomId: data.roomId });
+          }
+        }
+      } catch {
+        // Silently fail
+      } finally {
+        setActiveRoomLoading(false);
+      }
+    }
+    checkActiveRoom();
+  }, []);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -67,6 +89,12 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
       const data = await res.json();
 
       if (!res.ok) {
+        // If already in room, offer to return
+        if (res.status === 409 && data.roomCode) {
+          setActiveRoom({ roomCode: data.roomCode, roomId: '' });
+          setLoading(null);
+          return;
+        }
         setError(data.error || 'Failed to create room.');
         setLoading(null);
         return;
@@ -101,6 +129,11 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 409 && data.roomCode) {
+          setActiveRoom({ roomCode: data.roomCode, roomId: '' });
+          setLoading(null);
+          return;
+        }
         setError(data.error || 'Failed to join room.');
         setLoading(null);
         return;
@@ -112,6 +145,8 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
       setLoading(null);
     }
   }
+
+  const hasActiveRoom = !!activeRoom && !activeRoomLoading;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -208,26 +243,27 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
           </div>
 
           {/* Active Room Banner */}
-          {profile?.current_room_id && (
+          {!activeRoomLoading && hasActiveRoom && (
             <div className="p-4 rounded-xl bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 text-center">
               <p className="text-sm text-[var(--color-primary)] font-medium mb-2">
                 You&apos;re already in a room
               </p>
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <span className="font-mono text-lg font-bold tracking-wider text-[var(--color-text)]">
+                  {activeRoom!.roomCode.slice(0, 3)} {activeRoom!.roomCode.slice(3)}
+                </span>
+              </div>
               <button
-                onClick={() => {
-                  // We'll need to fetch the room code from the room ID
-                  // For now, this will be wired up in Milestone 2
-                  setError('Redirecting to your active room...');
-                }}
-                className="text-sm text-[var(--color-primary)] underline hover:text-[var(--color-primary-hover)]"
+                onClick={() => router.push(`/room/${activeRoom!.roomCode}`)}
+                className="text-sm text-[var(--color-primary)] underline hover:text-[var(--color-primary-hover)] transition-colors"
               >
                 Return to room →
               </button>
             </div>
           )}
 
-          {/* Create Room */}
-          {!profile?.current_room_id && (
+          {/* Create & Join (only if not in a room) */}
+          {!hasActiveRoom && !activeRoomLoading && (
             <div className="space-y-4">
               <button
                 onClick={handleCreateRoom}
@@ -267,6 +303,15 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
                   {loading === 'join' ? 'Joining...' : 'Join'}
                 </button>
               </form>
+            </div>
+          )}
+
+          {/* Skeleton while loading active room status */}
+          {activeRoomLoading && (
+            <div className="space-y-4 animate-pulse">
+              <div className="h-14 rounded-xl bg-[var(--color-surface)]" />
+              <div className="h-4 rounded bg-[var(--color-surface)] w-1/2 mx-auto" />
+              <div className="h-12 rounded-xl bg-[var(--color-surface)]" />
             </div>
           )}
 
