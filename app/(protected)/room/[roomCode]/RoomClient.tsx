@@ -44,7 +44,8 @@ export default function RoomClient({
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const isCreator = currentUser.id === creatorId;
-  const canStartGame = isCreator && status === 'ready' && player1 && player2;
+  // LOBBY-2: Either player can start the game
+  const canStartGame = status === 'ready' && player1 && player2;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -103,11 +104,9 @@ export default function RoomClient({
         showToast('Room is closing...');
         setTimeout(() => router.push('/home'), 1500);
       })
-      .on('broadcast', { event: 'game_starting' }, ({ payload }) => {
-        const gameId = payload?.gameId as string | undefined;
-        if (gameId) {
-          router.push(`/room/${roomCode}/game/${gameId}`);
-        }
+      .on('broadcast', { event: 'game_starting' }, () => {
+        // Refresh the page to pick up the new game state
+        router.refresh();
       })
       .on('presence', { event: 'sync' }, () => {
         // Presence state available via channel.presenceState()
@@ -238,8 +237,8 @@ export default function RoomClient({
         });
       }
 
-      // Redirect creator to game page
-      router.push(`/room/${roomCode}/game/${data.gameId}`);
+      // Refresh the room page to enter game state
+      router.refresh();
     } catch {
       setError('Something went wrong. Please try again.');
       setLoading(null);
@@ -412,8 +411,8 @@ export default function RoomClient({
 
           {/* Actions */}
           <div className="space-y-3">
-            {/* Start Game — only creator sees this */}
-            {isCreator && (
+            {/* Start Game — either player can start per LOBBY-2 */}
+            {status === 'ready' && (
               <motion.button
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -433,26 +432,15 @@ export default function RoomClient({
               </motion.button>
             )}
 
-            {/* Non-creator sees waiting for host */}
-            {!isCreator && status !== 'ready' && (
+            {/* Waiting status when only one player */}
+            {status === 'waiting' && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
                 className="w-full px-6 py-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-sm text-center"
               >
-                Waiting for host to start the game...
-              </motion.div>
-            )}
-
-            {!isCreator && status === 'ready' && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="w-full px-6 py-4 rounded-xl bg-[var(--color-success)]/10 border border-[var(--color-success)]/20 text-[var(--color-success)] text-sm text-center font-medium"
-              >
-                Ready! Waiting for host to start...
+                Waiting for another player to join...
               </motion.div>
             )}
 
