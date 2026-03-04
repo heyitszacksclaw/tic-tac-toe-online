@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface Profile {
   id: string;
@@ -26,13 +26,26 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [activeRoom, setActiveRoom] = useState<{ roomCode: string; roomId: string } | null>(null);
   const [activeRoomLoading, setActiveRoomLoading] = useState(true);
+  const [roomClosedToast, setRoomClosedToast] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   const wins = profile?.wins ?? 0;
   const losses = profile?.losses ?? 0;
   const draws = profile?.draws ?? 0;
   const totalGames = wins + losses + draws;
+
+  // Check for room_closed redirect reason (NOTIFY-5)
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    if (reason === 'room_closed') {
+      setRoomClosedToast(true);
+      setTimeout(() => setRoomClosedToast(false), 4000);
+      // Clean the URL without triggering a navigation
+      window.history.replaceState({}, '', '/home');
+    }
+  }, [searchParams]);
 
   // On mount, check for active room
   useEffect(() => {
@@ -151,6 +164,22 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-bg)]">
+      {/* Room closed notification (NOTIFY-5) */}
+      {roomClosedToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-medium shadow-lg flex items-center gap-3" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" stroke="var(--color-warning)" strokeWidth="1.5" />
+            <path d="M8 5v3.5M8 10.5v.5" stroke="var(--color-warning)" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <span>The room has been closed.</span>
+          <button onClick={() => setRoomClosedToast(false)} className="text-[var(--color-text-subtle)] hover:text-[var(--color-text)] transition-colors ml-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex items-center justify-between px-5 sm:px-8 py-4 border-b border-[var(--color-border)]" style={{background: 'linear-gradient(180deg, rgba(18,18,26,0.95) 0%, transparent 100%)'}}>
         <div className="flex items-center gap-3">

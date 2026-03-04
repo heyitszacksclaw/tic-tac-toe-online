@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import HomeClient from './HomeClient';
 
 export default async function HomePage() {
@@ -18,12 +19,14 @@ export default async function HomePage() {
     .single();
 
   return (
-    <HomeClient
-      user={{
-        id: user.id,
-        email: user.email || '',
-      }}
-      profile={profile}
-    />
+    <Suspense fallback={<div className="min-h-screen bg-[var(--color-bg)]" />}>
+      <HomeClient
+        user={{
+          id: user.id,
+          email: user.email || '',
+        }}
+        profile={profile}
+      />
+    </Suspense>
   );
 }

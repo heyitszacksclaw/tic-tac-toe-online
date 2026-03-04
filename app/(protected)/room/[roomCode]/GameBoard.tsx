@@ -33,6 +33,12 @@ interface GameData {
   winner_id: string | null;
   win_reason: string | null;
   turn_deadline: string;
+  completed_at?: string | null;
+}
+
+interface RematchState {
+  votes: Record<string, boolean>;
+  deadline: string;
 }
 
 interface GameBoardProps {
@@ -40,7 +46,12 @@ interface GameBoardProps {
   currentUser: { id: string; displayName: string };
   playerX: PlayerProfile;
   playerO: PlayerProfile;
-  onGameEnd?: () => void;
+  roomId: string;
+  roomCode: string;
+  onRematch: () => Promise<void>;
+  onLeaveRoom: () => Promise<void>;
+  rematchState: RematchState | null;
+  completedAt: string | null;
 }
 
 // ─── Sound helpers ─────────────────────────────────────────────────────────
@@ -94,7 +105,12 @@ export default function GameBoard({
   currentUser,
   playerX,
   playerO,
-  onGameEnd,
+  roomId,
+  roomCode,
+  onRematch,
+  onLeaveRoom,
+  rematchState: externalRematchState,
+  completedAt,
 }: GameBoardProps) {
   const [game, setGame] = useState<GameData>(initialGame);
   const [optimisticBoard, setOptimisticBoard] = useState<(string | null)[] | null>(null);
@@ -107,7 +123,15 @@ export default function GameBoard({
   const [myTurnTimedOut, setMyTurnTimedOut] = useState(false);
   const [opponentLeftToast, setOpponentLeftToast] = useState(false);
 
+  // Rematch state
+  const [rematchCountdown, setRematchCountdown] = useState<number>(60);
+  const [rematchLoading, setRematchLoading] = useState(false);
+
+  // Navigation guard state
+  const [showNavGuardDialog, setShowNavGuardDialog] = useState(false);
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rematchTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutClaimedRef = useRef(false);
   const supabase = createClient();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -133,6 +157,11 @@ export default function GameBoard({
     else if (game.winner_id === currentUser.id) gameResult = 'win';
     else if (game.winner_id) gameResult = 'lose';
   }
+
+  // Rematch votes
+  const iVoted = externalRematchState?.votes?.[currentUser.id] ?? false;
+  const opponentId = isPlayerX ? game.player_o : game.player_x;
+  const opponentVoted = externalRematchState?.votes?.[opponentId] ?? false;
 
   // ─── Realtime subscription ────────────────────────────────────────────────
 
@@ -226,6 +255,58 @@ export default function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.turn_deadline, isGameOver, isOpponentTurn, gameState.currentTurn, myMark]);
 
+  // ─── Rematch countdown timer ─────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isGameOver) {
+      if (rematchTimerRef.current) clearInterval(rematchTimerRef.current);
+      return;
+    }
+
+    // Calculate deadline from completedAt or game's completed_at
+    const gameCompletedAt = completedAt || game.completed_at;
+    if (!gameCompletedAt) return;
+
+    const deadline = new Date(new Date(gameCompletedAt).getTime() + 60 * 1000);
+
+    const updateRematchTimer = () => {
+      const now = new Date();
+      const remaining = Math.max(0, Math.ceil((deadline.getTime() - now.getTime()) / 1000));
+      setRematchCountdown(remaining);
+
+      if (remaining === 0) {
+        if (rematchTimerRef.current) clearInterval(rematchTimerRef.current);
+        // Auto-leave when timer expires
+        onLeaveRoom();
+      }
+    };
+
+    updateRematchTimer();
+    rematchTimerRef.current = setInterval(updateRematchTimer, 1000);
+
+    return () => {
+      if (rematchTimerRef.current) clearInterval(rematchTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGameOver, completedAt, game.completed_at]);
+
+  // ─── Navigation guard (NAV-1 through NAV-4) ─────────────────────────────
+
+  useEffect(() => {
+    if (isGameOver) return; // No guard during post-game
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Modern browsers ignore custom messages; they show their own dialog
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isGameOver]);
+
   // ─── Sound effects ────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -307,6 +388,7 @@ export default function GameBoard({
 
   const handleForfeit = useCallback(async () => {
     setForfeitDialog(false);
+    setShowNavGuardDialog(false);
     try {
       await fetch('/api/game/forfeit', {
         method: 'POST',
@@ -317,6 +399,18 @@ export default function GameBoard({
       setError('Failed to forfeit. Please try again.');
     }
   }, [game.id]);
+
+  const handleRematchClick = useCallback(async () => {
+    if (rematchLoading || iVoted) return;
+    setRematchLoading(true);
+    try {
+      await onRematch();
+    } catch {
+      setError('Failed to request rematch.');
+    } finally {
+      setRematchLoading(false);
+    }
+  }, [onRematch, rematchLoading, iVoted]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLButtonElement>, cellIndex: number) => {
@@ -343,20 +437,26 @@ export default function GameBoard({
     ? playerX.display_name
     : playerO.display_name;
 
-  const resultMessage = () => {
-    if (!isGameOver) return null;
-    if (game.win_reason === 'draw') return 'Draw!';
+  // ─── Contextual result messages (NOTIFY-1 through NOTIFY-6) ─────────────
+
+  const resultMessage = (): string => {
+    if (!isGameOver) return '';
+    if (game.win_reason === 'draw') return "It's a draw!";
     if (game.win_reason === 'timeout') {
-      if (gameResult === 'win') return 'Opponent timed out — You win!';
-      return 'Time ran out — You lose!';
+      if (gameResult === 'win') return 'Your opponent timed out. You win!';
+      return 'You ran out of time. You lose!';
     }
     if (game.win_reason === 'forfeit') {
-      if (gameResult === 'win') return 'Opponent forfeited — You win!';
-      return 'You forfeited — You lose!';
+      if (gameResult === 'win') return 'Your opponent forfeited. You win!';
+      return 'You forfeited. You lose!';
+    }
+    if (game.win_reason === 'three_in_row') {
+      if (gameResult === 'win') return 'You win! Three in a row!';
+      return `${winnerName} wins with three in a row!`;
     }
     if (gameResult === 'win') return 'You win!';
     if (gameResult === 'lose') return `${winnerName} wins!`;
-    return null;
+    return '';
   };
 
   const resultColor = gameResult === 'win'
@@ -364,6 +464,15 @@ export default function GameBoard({
     : gameResult === 'lose'
     ? 'var(--color-danger)'
     : 'var(--color-warning)';
+
+  // ─── Rematch status text ─────────────────────────────────────────────────
+
+  const rematchStatusText = (): string => {
+    if (iVoted && opponentVoted) return 'Starting new game…';
+    if (iVoted) return 'Waiting for opponent…';
+    if (opponentVoted) return 'Opponent wants to rematch!';
+    return 'Want to play again?';
+  };
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -404,7 +513,7 @@ export default function GameBoard({
             )}
           </button>
 
-          {/* Forfeit button (GAME-10) */}
+          {/* Forfeit button (GAME-10) — only during active play */}
           {!isGameOver && (
             <button
               onClick={() => setForfeitDialog(true)}
@@ -435,7 +544,7 @@ export default function GameBoard({
       <main className="flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
         <div className="w-full max-w-2xl space-y-6">
 
-          {/* Game result banner */}
+          {/* Game result banner + Rematch Section */}
           <AnimatePresence>
             {isGameOver && (
               <motion.div
@@ -451,20 +560,63 @@ export default function GameBoard({
                 <p className="text-2xl font-bold mb-1" style={{ color: resultColor }}>
                   {resultMessage()}
                 </p>
-                {game.win_reason === 'three_in_row' && (
-                  <p className="text-sm text-[var(--color-text-muted)]">Three in a row!</p>
-                )}
                 {game.win_reason === 'draw' && (
                   <p className="text-sm text-[var(--color-text-muted)]">No winner — well played!</p>
                 )}
-                {onGameEnd && (
-                  <button
-                    onClick={onGameEnd}
-                    className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-semibold hover:bg-[var(--color-surface-hover)] transition-colors"
-                  >
-                    Back to Home
-                  </button>
-                )}
+
+                {/* Rematch Section */}
+                <div className="mt-5 pt-5 border-t border-[var(--color-border)]">
+                  {/* Countdown timer */}
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                      <circle cx="7" cy="7" r="6" stroke="var(--color-text-subtle)" strokeWidth="1.5" />
+                      <path d="M7 4v3.5l2 1.5" stroke="var(--color-text-subtle)" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    <span className={`text-sm font-mono font-bold tabular-nums ${rematchCountdown <= 10 ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted)]'}`}>
+                      {rematchCountdown}s
+                    </span>
+                  </div>
+
+                  {/* Status text */}
+                  <p className="text-sm text-[var(--color-text-muted)] mb-4">
+                    {rematchStatusText()}
+                  </p>
+
+                  {/* Action buttons */}
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={handleRematchClick}
+                      disabled={rematchLoading || iVoted || rematchCountdown === 0}
+                      className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                        iVoted
+                          ? 'bg-[var(--color-success-dim)] border border-[var(--color-success)]/30 text-[var(--color-success)] cursor-default'
+                          : 'bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed'
+                      }`}
+                    >
+                      {rematchLoading ? (
+                        <span className="flex items-center gap-2">
+                          <LoadingSpinner />
+                          Requesting…
+                        </span>
+                      ) : iVoted ? (
+                        <span className="flex items-center gap-2">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                            <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          Voted
+                        </span>
+                      ) : (
+                        'Play Again'
+                      )}
+                    </button>
+                    <button
+                      onClick={onLeaveRoom}
+                      className="px-5 py-2.5 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-semibold hover:bg-[var(--color-surface-hover)] transition-colors text-[var(--color-text-muted)]"
+                    >
+                      Leave Room
+                    </button>
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -602,61 +754,110 @@ export default function GameBoard({
           </div>
 
           {/* Move count */}
-          <p className="text-center text-xs text-[var(--color-text-subtle)]">
-            Move {gameState.moveCount} of 9
-          </p>
+          {!isGameOver && (
+            <p className="text-center text-xs text-[var(--color-text-subtle)]">
+              Move {gameState.moveCount} of 9
+            </p>
+          )}
         </div>
       </main>
 
       {/* Forfeit dialog (GAME-10) */}
       <AnimatePresence>
         {forfeitDialog && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: 'rgba(0,0,0,0.7)' }}
-            onClick={() => setForfeitDialog(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 16 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="card-elevated w-full max-w-sm rounded-2xl p-6 space-y-5"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-center space-y-2">
-                <div className="w-12 h-12 rounded-2xl bg-[var(--color-danger-dim)] border border-[var(--color-danger)]/20 flex items-center justify-center mx-auto mb-4">
-                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-                    <path d="M11 4v7M11 15v2" stroke="var(--color-danger)" strokeWidth="2.5" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <h2 className="text-base font-bold">End Game?</h2>
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  Ending the game counts as a forfeit — a loss for you and a win for your opponent.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setForfeitDialog(false)}
-                  className="flex-1 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-semibold hover:bg-[var(--color-surface-hover)] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleForfeit}
-                  className="flex-1 py-3 rounded-xl bg-[var(--color-danger)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
-                >
-                  Forfeit
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+          <ConfirmDialog
+            title="End Game?"
+            message="Ending the game counts as a forfeit — a loss for you and a win for your opponent."
+            confirmLabel="Forfeit"
+            onConfirm={handleForfeit}
+            onCancel={() => setForfeitDialog(false)}
+            isDanger={true}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Navigation guard dialog (NAV-1 through NAV-4) */}
+      <AnimatePresence>
+        {showNavGuardDialog && (
+          <ConfirmDialog
+            title="Leave Game?"
+            message="If you leave, you forfeit this game. Leave anyway?"
+            confirmLabel="Leave & Forfeit"
+            onConfirm={handleForfeit}
+            onCancel={() => setShowNavGuardDialog(false)}
+            isDanger={true}
+          />
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ─── Confirm Dialog ───────────────────────────────────────────────────────────
+
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+  isDanger = false,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isDanger?: boolean;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)' }}
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92, y: 16 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        className="card-elevated w-full max-w-sm rounded-2xl p-6 space-y-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-center space-y-2">
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+            isDanger
+              ? 'bg-[var(--color-danger-dim)] border border-[var(--color-danger)]/20'
+              : 'bg-[var(--color-warning-dim)] border border-[var(--color-warning)]/20'
+          }`}>
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+              <path d="M11 4v7M11 15v2" stroke={isDanger ? 'var(--color-danger)' : 'var(--color-warning)'} strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
+          </div>
+          <h2 className="text-base font-bold">{title}</h2>
+          <p className="text-sm text-[var(--color-text-muted)]">{message}</p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-semibold hover:bg-[var(--color-surface-hover)] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`flex-1 py-3 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-opacity ${
+              isDanger ? 'bg-[var(--color-danger)]' : 'bg-[var(--color-warning)]'
+            }`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -978,6 +1179,17 @@ function WinLine({ winningLine, board }: { winningLine: number[]; board: (string
         className="animate-draw-line"
         vectorEffect="non-scaling-stroke"
       />
+    </svg>
+  );
+}
+
+// ─── Loading Spinner ──────────────────────────────────────────────────────────
+
+function LoadingSpinner() {
+  return (
+    <svg className="animate-spin" width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
+      <path d="M8 2a6 6 0 016 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

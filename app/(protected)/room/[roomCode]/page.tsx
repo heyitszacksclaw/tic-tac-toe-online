@@ -18,10 +18,10 @@ export default async function RoomPage({ params }: RoomPageProps) {
 
   const admin = createAdminClient();
 
-  // Fetch room data
+  // Fetch room data including rematch_state
   const { data: room } = await admin
     .from('rooms')
-    .select('id, room_code, status, creator_id, player1_id, player2_id')
+    .select('id, room_code, status, creator_id, player1_id, player2_id, rematch_state')
     .eq('room_code', roomCode.toUpperCase())
     .single();
 
@@ -39,9 +39,9 @@ export default async function RoomPage({ params }: RoomPageProps) {
     redirect('/home');
   }
 
-  // If room is closed, go home
+  // If room is closed, go home with reason
   if (room.status === 'closed') {
-    redirect('/home');
+    redirect('/home?reason=room_closed');
   }
 
   // Fetch player profiles
@@ -63,11 +63,12 @@ export default async function RoomPage({ params }: RoomPageProps) {
 
   // If game is active/post_game, fetch the game data so we can pass it to the client
   let activeGame = null;
+  let gameCompletedAt: string | null = null;
   if (room.status === 'playing' || room.status === 'post_game') {
     const { data: game } = await admin
       .from('games')
       .select(
-        'id, room_id, player_x, player_o, game_state, status, winner_id, win_reason, turn_deadline'
+        'id, room_id, player_x, player_o, game_state, status, winner_id, win_reason, turn_deadline, completed_at'
       )
       .eq('room_id', room.id)
       .order('created_at', { ascending: false })
@@ -75,6 +76,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
       .single();
 
     activeGame = game ?? null;
+    gameCompletedAt = game?.completed_at ?? null;
   }
 
   // Fetch profiles for X and O if game exists
@@ -91,6 +93,9 @@ export default async function RoomPage({ params }: RoomPageProps) {
     playerOProfile = gameProfiles?.find((p) => p.id === activeGame.player_o) ?? null;
   }
 
+  // Parse rematch state
+  const rematchState = room.rematch_state as { votes: Record<string, boolean>; deadline: string } | null;
+
   return (
     <RoomClient
       roomCode={room.room_code}
@@ -103,6 +108,8 @@ export default async function RoomPage({ params }: RoomPageProps) {
       initialGame={activeGame}
       playerXProfile={playerXProfile}
       playerOProfile={playerOProfile}
+      initialRematchState={rematchState}
+      initialCompletedAt={gameCompletedAt}
     />
   );
 }

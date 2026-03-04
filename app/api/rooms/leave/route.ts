@@ -131,36 +131,31 @@ export async function POST() {
           .update({ current_room_id: null })
           .in('id', playerIds);
       }
+    } else if (room.status === 'post_game') {
+      // Leaving during post-game: immediately close the room and clear both players
+      await admin
+        .from('rooms')
+        .update({
+          status: 'closed',
+          closed_at: new Date().toISOString(),
+          rematch_state: null,
+        })
+        .eq('id', room.id);
+
+      // Clear BOTH players' current_room_id
+      const playerIds = [room.player1_id, room.player2_id].filter(Boolean) as string[];
+      if (playerIds.length > 0) {
+        await admin
+          .from('profiles')
+          .update({ current_room_id: null })
+          .in('id', playerIds);
+      }
     } else {
-      // Post-game — just clear the user's room reference
+      // Closed or other status — just clear the user's room reference
       await admin
         .from('profiles')
         .update({ current_room_id: null })
         .eq('id', user.id);
-
-      // If room is in post_game and both players are leaving, close it
-      if (room.status === 'post_game') {
-        // Check if the other player is also gone
-        const otherId = room.player1_id === user.id ? room.player2_id : room.player1_id;
-        if (otherId) {
-          const { data: otherProfile } = await admin
-            .from('profiles')
-            .select('current_room_id')
-            .eq('id', otherId)
-            .single();
-          if (!otherProfile?.current_room_id) {
-            await admin
-              .from('rooms')
-              .update({ status: 'closed', closed_at: new Date().toISOString() })
-              .eq('id', room.id);
-          }
-        } else {
-          await admin
-            .from('rooms')
-            .update({ status: 'closed', closed_at: new Date().toISOString() })
-            .eq('id', room.id);
-        }
-      }
     }
 
     return NextResponse.json({ success: true });

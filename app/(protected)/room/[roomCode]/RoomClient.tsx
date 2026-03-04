@@ -31,6 +31,12 @@ interface GameData {
   winner_id: string | null;
   win_reason: string | null;
   turn_deadline: string;
+  completed_at?: string | null;
+}
+
+interface RematchState {
+  votes: Record<string, boolean>;
+  deadline: string;
 }
 
 interface RoomClientProps {
@@ -44,6 +50,8 @@ interface RoomClientProps {
   initialGame: GameData | null;
   playerXProfile: PlayerProfile | null;
   playerOProfile: PlayerProfile | null;
+  initialRematchState: RematchState | null;
+  initialCompletedAt: string | null;
 }
 
 export default function RoomClient({
@@ -57,6 +65,8 @@ export default function RoomClient({
   initialGame,
   playerXProfile,
   playerOProfile,
+  initialRematchState,
+  initialCompletedAt,
 }: RoomClientProps) {
   const [player1, setPlayer1] = useState<PlayerProfile | null>(initialPlayer1);
   const [player2, setPlayer2] = useState<PlayerProfile | null>(initialPlayer2);
@@ -68,6 +78,8 @@ export default function RoomClient({
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [rematchState, setRematchState] = useState<RematchState | null>(initialRematchState);
+  const [completedAt, setCompletedAt] = useState<string | null>(initialCompletedAt);
   const router = useRouter();
   const supabase = createClient();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -87,7 +99,7 @@ export default function RoomClient({
     const { data: gameRow } = await supabaseClient
       .from('games')
       .select(
-        'id, room_id, player_x, player_o, game_state, status, winner_id, win_reason, turn_deadline'
+        'id, room_id, player_x, player_o, game_state, status, winner_id, win_reason, turn_deadline, completed_at'
       )
       .eq('room_id', roomId)
       .order('created_at', { ascending: false })
@@ -97,6 +109,9 @@ export default function RoomClient({
     if (!gameRow) return;
 
     setGame(gameRow);
+    if (gameRow.completed_at) {
+      setCompletedAt(gameRow.completed_at);
+    }
 
     // Fetch player profiles for X and O
     const ids = [gameRow.player_x, gameRow.player_o].filter(Boolean) as string[];
@@ -111,18 +126,33 @@ export default function RoomClient({
     }
   }, [roomId]);
 
+  // Fetch rematch state from room
+  const fetchRematchState = useCallback(async () => {
+    const supabaseClient = createClient();
+    const { data: room } = await supabaseClient
+      .from('rooms')
+      .select('rematch_state')
+      .eq('id', roomId)
+      .single();
+
+    if (room) {
+      setRematchState(room.rematch_state as RematchState | null);
+    }
+  }, [roomId]);
+
   // Refresh room data from DB
   const refreshRoom = useCallback(async () => {
     const supabaseClient = createClient();
     const { data: room } = await supabaseClient
       .from('rooms')
-      .select('status, player1_id, player2_id')
+      .select('status, player1_id, player2_id, rematch_state')
       .eq('room_code', roomCode)
       .single();
 
     if (!room) return;
 
     setStatus(room.status);
+    setRematchState(room.rematch_state as RematchState | null);
 
     if (room.player1_id) {
       const { data: p1 } = await supabaseClient
@@ -162,12 +192,30 @@ export default function RoomClient({
       })
       .on('broadcast', { event: 'game_starting' }, async () => {
         await fetchGame();
+        setRematchState(null);
         setStatus('playing');
       })
       .on('broadcast', { event: 'player_left_game' }, async (payload: { payload: { userId: string } }) => {
         if (payload.payload.userId !== currentUser.id) {
           showToast('Your opponent left — You win!');
           await fetchGame();
+        }
+      })
+      .on('broadcast', { event: 'rematch_vote' }, async () => {
+        // Other player voted for rematch — refresh rematch state
+        await fetchRematchState();
+      })
+      .on('broadcast', { event: 'rematch_starting' }, async () => {
+        // Both players agreed — fetch new game data
+        showToast('New game starting!');
+        setRematchState(null);
+        await fetchGame();
+        setStatus('playing');
+      })
+      .on('broadcast', { event: 'player_left_postgame' }, (payload: { payload: { userId: string } }) => {
+        if (payload.payload.userId !== currentUser.id) {
+          showToast('Your opponent left the room.');
+          setTimeout(() => router.push('/home?reason=room_closed'), 1500);
         }
       })
       .on('presence', { event: 'sync' }, () => {
@@ -203,15 +251,21 @@ export default function RoomClient({
           filter: `id=eq.${roomId}`,
         },
         async (payload) => {
-          const newStatus = (payload.new as { status: string }).status;
+          const newRoom = payload.new as { status: string; rematch_state: RematchState | null };
+          const newStatus = newRoom.status;
           setStatus(newStatus);
+          setRematchState(newRoom.rematch_state ?? null);
 
           if (newStatus === 'closed') {
             showToast('Room has been closed.');
-            setTimeout(() => router.push('/home'), 1500);
+            setTimeout(() => router.push('/home?reason=room_closed'), 1500);
           } else if (newStatus === 'ready') {
             await refreshRoom();
-          } else if (newStatus === 'playing' || newStatus === 'post_game') {
+          } else if (newStatus === 'playing') {
+            // Could be new game from rematch or initial game start
+            await fetchGame();
+            setRematchState(null);
+          } else if (newStatus === 'post_game') {
             await fetchGame();
           }
         }
@@ -255,6 +309,13 @@ export default function RoomClient({
           await channelRef.current.send({
             type: 'broadcast',
             event: 'player_left_game',
+            payload: { userId: currentUser.id },
+          });
+        } else if (status === 'post_game') {
+          // Leaving during post-game — notify opponent
+          await channelRef.current.send({
+            type: 'broadcast',
+            event: 'player_left_postgame',
             payload: { userId: currentUser.id },
           });
         } else if (isCreator) {
@@ -317,27 +378,86 @@ export default function RoomClient({
     }
   }
 
-  async function handleGameEnd() {
-    // Since rematch (M4) isn't implemented yet, leave the room and go home
+  async function handleRematch() {
     try {
-      await fetch('/api/rooms/leave', { method: 'POST' });
+      const res = await fetch('/api/game/rematch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.error || 'Failed to request rematch.');
+        return;
+      }
+
+      // Broadcast vote event for the other player
+      if (channelRef.current) {
+        if (data.newGameStarted) {
+          // Both voted — broadcast rematch_starting
+          await channelRef.current.send({
+            type: 'broadcast',
+            event: 'rematch_starting',
+            payload: { gameId: data.gameId },
+          });
+          // Fetch new game for this client too
+          await fetchGame();
+          setRematchState(null);
+          setStatus('playing');
+        } else {
+          // Only my vote — broadcast rematch_vote
+          await channelRef.current.send({
+            type: 'broadcast',
+            event: 'rematch_vote',
+            payload: { userId: currentUser.id },
+          });
+          // Update local rematch state
+          await fetchRematchState();
+        }
+      }
     } catch {
-      // Best-effort leave — navigate home regardless
+      showToast('Network error. Please try again.');
     }
-    router.push('/home');
   }
 
-  // ─── Render game board when playing ────────────────────────────────────────
+  async function handleLeavePostGame() {
+    await handleLeaveRoom();
+  }
+
+  // ─── Render game board when playing or post_game ──────────────────────────
 
   if ((status === 'playing' || status === 'post_game') && game && xProfile && oProfile) {
     return (
-      <GameBoard
-        game={game}
-        currentUser={currentUser}
-        playerX={xProfile}
-        playerO={oProfile}
-        onGameEnd={handleGameEnd}
-      />
+      <>
+        {/* Toast for room events */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+              className="fixed top-5 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-medium shadow-[var(--shadow-lg)]"
+            >
+              {toast}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <GameBoard
+          game={game}
+          currentUser={currentUser}
+          playerX={xProfile}
+          playerO={oProfile}
+          roomId={roomId}
+          roomCode={roomCode}
+          onRematch={handleRematch}
+          onLeaveRoom={handleLeavePostGame}
+          rematchState={rematchState}
+          completedAt={completedAt}
+        />
+      </>
     );
   }
 
