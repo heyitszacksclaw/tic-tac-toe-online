@@ -109,9 +109,7 @@ export default function RoomClient({
     if (!gameRow) return;
 
     setGame(gameRow);
-    if (gameRow.completed_at) {
-      setCompletedAt(gameRow.completed_at);
-    }
+    setCompletedAt(gameRow.completed_at ?? null);
 
     // Fetch player profiles for X and O
     const ids = [gameRow.player_x, gameRow.player_o].filter(Boolean) as string[];

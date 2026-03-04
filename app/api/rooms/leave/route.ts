@@ -118,19 +118,17 @@ export async function POST() {
           .eq('id', activeGame.id);
       }
 
-      // Close the room and clear both players
+      // Set room to post_game so the remaining player can see the result
       await admin
         .from('rooms')
-        .update({ status: 'closed', closed_at: new Date().toISOString() })
+        .update({ status: 'post_game' })
         .eq('id', room.id);
 
-      const playerIds = [room.player1_id, room.player2_id].filter(Boolean) as string[];
-      if (playerIds.length > 0) {
-        await admin
-          .from('profiles')
-          .update({ current_room_id: null })
-          .in('id', playerIds);
-      }
+      // Only clear the LEAVING player's current_room_id
+      await admin
+        .from('profiles')
+        .update({ current_room_id: null })
+        .eq('id', user.id);
     } else if (room.status === 'post_game') {
       // Leaving during post-game: immediately close the room and clear both players
       await admin

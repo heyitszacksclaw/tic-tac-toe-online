@@ -113,6 +113,25 @@ export default function GameBoard({
   completedAt,
 }: GameBoardProps) {
   const [game, setGame] = useState<GameData>(initialGame);
+
+  // Sync game state when prop changes (e.g., new rematch game)
+  useEffect(() => {
+    if (initialGame.id !== game.id) {
+      setGame(initialGame);
+      setOptimisticBoard(null);
+      setRematchCountdown(60);
+      setRematchLoading(false);
+      setError(null);
+      setMyTurnTimedOut(false);
+      setForfeitDialog(false);
+      setShowNavGuardDialog(false);
+      setOpponentLeftToast(false);
+      setLastPlayedSound(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialGame.id]);
+  // Note: intentionally only depends on initialGame.id
+
   const [optimisticBoard, setOptimisticBoard] = useState<(string | null)[] | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(30);
   const [muted, setMuted] = useState(false);
@@ -260,12 +279,17 @@ export default function GameBoard({
   useEffect(() => {
     if (!isGameOver) {
       if (rematchTimerRef.current) clearInterval(rematchTimerRef.current);
+      setRematchCountdown(60); // Reset for next game
       return;
     }
 
     // Calculate deadline from completedAt or game's completed_at
     const gameCompletedAt = completedAt || game.completed_at;
-    if (!gameCompletedAt) return;
+    if (!gameCompletedAt) {
+      // No completed_at yet — set a reasonable default and wait for it to arrive
+      setRematchCountdown(60);
+      return;
+    }
 
     const deadline = new Date(new Date(gameCompletedAt).getTime() + 60 * 1000);
 
@@ -276,8 +300,11 @@ export default function GameBoard({
 
       if (remaining === 0) {
         if (rematchTimerRef.current) clearInterval(rematchTimerRef.current);
-        // Auto-leave when timer expires
-        onLeaveRoom();
+        // Only auto-leave if the user hasn't voted for rematch
+        // If they voted, they're waiting for opponent — don't kick them out
+        if (!iVoted) {
+          onLeaveRoom();
+        }
       }
     };
 
@@ -288,7 +315,7 @@ export default function GameBoard({
       if (rematchTimerRef.current) clearInterval(rematchTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGameOver, completedAt, game.completed_at]);
+  }, [isGameOver, completedAt, game.completed_at, iVoted]);
 
   // ─── Navigation guard (NAV-1 through NAV-4) ─────────────────────────────
 
