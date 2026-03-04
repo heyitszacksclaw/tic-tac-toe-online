@@ -73,8 +73,8 @@ export default function RoomClient({
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const isCreator = currentUser.id === creatorId;
-  // LOBBY-2: Either player can start the game
-  const canStartGame = status === 'ready' && player1 && player2;
+  // Only the host can start the game
+  const canStartGame = status === 'ready' && player1 && player2 && isCreator;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -164,6 +164,12 @@ export default function RoomClient({
         await fetchGame();
         setStatus('playing');
       })
+      .on('broadcast', { event: 'player_left_game' }, async (payload: { payload: { userId: string } }) => {
+        if (payload.payload.userId !== currentUser.id) {
+          showToast('Your opponent left — You win!');
+          await fetchGame();
+        }
+      })
       .on('presence', { event: 'sync' }, () => {
         // Presence state available via channel.presenceState()
       })
@@ -244,7 +250,14 @@ export default function RoomClient({
 
       // Broadcast to others
       if (channelRef.current) {
-        if (isCreator) {
+        if (status === 'playing') {
+          // Leaving during an active game — notify opponent of forfeit
+          await channelRef.current.send({
+            type: 'broadcast',
+            event: 'player_left_game',
+            payload: { userId: currentUser.id },
+          });
+        } else if (isCreator) {
           await channelRef.current.send({
             type: 'broadcast',
             event: 'room_closing',
@@ -502,8 +515,8 @@ export default function RoomClient({
 
           {/* Actions */}
           <div className="space-y-3">
-            {/* Start Game — either player can start per LOBBY-2 */}
-            {status === 'ready' && (
+            {/* Start Game — only the host can start */}
+            {status === 'ready' && isCreator && (
               <motion.button
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -527,6 +540,18 @@ export default function RoomClient({
                   </>
                 )}
               </motion.button>
+            )}
+
+            {/* Non-host waiting message */}
+            {status === 'ready' && !isCreator && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="w-full px-6 py-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-sm text-center"
+              >
+                Waiting for host to start the game...
+              </motion.div>
             )}
 
             {/* Waiting status when only one player */}

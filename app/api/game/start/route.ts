@@ -31,7 +31,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Room not found.' }, { status: 404 });
     }
 
-    // Verify the requesting user is a player in the room (LOBBY-2: either player can start)
+    // Verify the requesting user is the room creator (only host can start)
+    if (room.creator_id !== user.id) {
+      return NextResponse.json({ error: 'Only the host can start the game.' }, { status: 403 });
+    }
+
+    // Verify the requesting user is a player in the room
     if (room.player1_id !== user.id && room.player2_id !== user.id) {
       return NextResponse.json({ error: 'You are not a player in this room.' }, { status: 403 });
     }

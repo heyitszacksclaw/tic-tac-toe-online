@@ -65,8 +65,74 @@ export async function POST() {
         .from('profiles')
         .update({ current_room_id: null })
         .eq('id', user.id);
+    } else if (room.status === 'playing') {
+      // Leaving during an active game = forfeit
+      const { data: activeGame } = await admin
+        .from('games')
+        .select('id, player_x, player_o, status')
+        .eq('room_id', room.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (activeGame) {
+        const isPlayerX = activeGame.player_x === user.id;
+        const opponentId = isPlayerX ? activeGame.player_o : activeGame.player_x;
+        const timestamp = new Date().toISOString();
+
+        // Update stats: leaving player gets a loss, opponent gets a win
+        const { data: leaverProfile } = await admin
+          .from('profiles')
+          .select('losses')
+          .eq('id', user.id)
+          .single();
+        if (leaverProfile) {
+          await admin
+            .from('profiles')
+            .update({ losses: (leaverProfile.losses ?? 0) + 1 })
+            .eq('id', user.id);
+        }
+
+        const { data: opponentProfile } = await admin
+          .from('profiles')
+          .select('wins')
+          .eq('id', opponentId)
+          .single();
+        if (opponentProfile) {
+          await admin
+            .from('profiles')
+            .update({ wins: (opponentProfile.wins ?? 0) + 1 })
+            .eq('id', opponentId);
+        }
+
+        // Mark game as completed with forfeit
+        await admin
+          .from('games')
+          .update({
+            status: 'completed',
+            winner_id: opponentId,
+            win_reason: 'forfeit',
+            completed_at: timestamp,
+          })
+          .eq('id', activeGame.id);
+      }
+
+      // Close the room and clear both players
+      await admin
+        .from('rooms')
+        .update({ status: 'closed', closed_at: new Date().toISOString() })
+        .eq('id', room.id);
+
+      const playerIds = [room.player1_id, room.player2_id].filter(Boolean) as string[];
+      if (playerIds.length > 0) {
+        await admin
+          .from('profiles')
+          .update({ current_room_id: null })
+          .in('id', playerIds);
+      }
     } else {
-      // Post-game or playing — just clear the user's room reference
+      // Post-game — just clear the user's room reference
       await admin
         .from('profiles')
         .update({ current_room_id: null })

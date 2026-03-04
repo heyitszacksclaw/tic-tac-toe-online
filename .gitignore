@@ -40,3 +40,14 @@ next-env.d.ts
 
 # supabase
 supabase/.temp/
+
+# playwright
+playwright-report/
+test-results/
+playwright/.auth/
+
+# e2e tests (contain test credentials - do not commit)
+/e2e/
+playwright.config.ts
+/test-results/
+/playwright-report/

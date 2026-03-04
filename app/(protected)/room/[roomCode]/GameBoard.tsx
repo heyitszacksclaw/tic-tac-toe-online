@@ -105,6 +105,7 @@ export default function GameBoard({
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({});
   const [lastPlayedSound, setLastPlayedSound] = useState<string | null>(null);
   const [myTurnTimedOut, setMyTurnTimedOut] = useState(false);
+  const [opponentLeftToast, setOpponentLeftToast] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutClaimedRef = useRef(false);
@@ -161,6 +162,11 @@ export default function GameBoard({
           }
         }
         setPresenceMap(map);
+      })
+      .on('broadcast', { event: 'player_left_game' }, (payload: { payload: { userId: string } }) => {
+        if (payload.payload.userId !== currentUser.id) {
+          setOpponentLeftToast(true);
+        }
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -409,6 +415,21 @@ export default function GameBoard({
           )}
         </div>
       </header>
+
+      {/* Opponent left toast */}
+      <AnimatePresence>
+        {opponentLeftToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-medium shadow-[var(--shadow-lg)]"
+          >
+            Your opponent left — You win!
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main layout */}
       <main className="flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
