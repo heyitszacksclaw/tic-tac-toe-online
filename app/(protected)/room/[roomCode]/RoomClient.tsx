@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import GameBoard from './GameBoard';
 
 interface PlayerProfile {
@@ -83,6 +83,8 @@ export default function RoomClient({
   const router = useRouter();
   const supabase = createClient();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const motionDuration = shouldReduceMotion ? 0 : undefined;
 
   const isCreator = currentUser.id === creatorId;
   // Only the host can start the game
@@ -433,10 +435,10 @@ export default function RoomClient({
         <AnimatePresence>
           {toast && (
             <motion.div
-              initial={{ opacity: 0, y: -8 }}
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+              transition={{ duration: motionDuration ?? 0.2 }}
               className="fixed top-5 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-medium shadow-[var(--shadow-lg)]"
             >
               {toast}
@@ -498,10 +500,10 @@ export default function RoomClient({
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={{ duration: motionDuration ?? 0.2 }}
             className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-medium shadow-[var(--shadow-lg)]"
           >
             {toast}
@@ -515,9 +517,9 @@ export default function RoomClient({
 
           {/* Room Code Display */}
           <motion.div
-            initial={{ opacity: 0, y: 12 }}
+            initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: motionDuration ?? 0.3 }}
             className="text-center"
           >
             <p className="text-xs uppercase tracking-[0.2em] text-[var(--color-text-muted)] mb-4 font-semibold">
@@ -549,7 +551,7 @@ export default function RoomClient({
                 <AnimatePresence>
                   {copied && (
                     <motion.span
-                      initial={{ opacity: 0, y: 4 }}
+                      initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
                       className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs text-[var(--color-success)] whitespace-nowrap font-medium"
@@ -606,7 +608,7 @@ export default function RoomClient({
             {status === 'ready' && (
               <motion.div
                 key="ready"
-                initial={{ opacity: 0, scale: 0.95 }}
+                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
                 className="flex items-center justify-center gap-3 py-4 px-5 rounded-2xl bg-[var(--color-success-dim)] border border-[var(--color-success)]/20 text-sm text-[var(--color-success)] font-medium"
@@ -636,9 +638,9 @@ export default function RoomClient({
             {/* Start Game — only the host can start */}
             {status === 'ready' && isCreator && (
               <motion.button
-                initial={{ opacity: 0, y: 8 }}
+                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+                transition={{ delay: shouldReduceMotion ? 0 : 0.3 }}
                 onClick={handleStartGame}
                 disabled={!canStartGame || loading === 'start'}
                 className="btn-primary w-full text-base py-5 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
@@ -663,9 +665,9 @@ export default function RoomClient({
             {/* Non-host waiting message */}
             {status === 'ready' && !isCreator && (
               <motion.div
-                initial={{ opacity: 0, y: 8 }}
+                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+                transition={{ delay: shouldReduceMotion ? 0 : 0.3 }}
                 className="w-full px-6 py-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-sm text-center"
               >
                 Waiting for host to start the game...
@@ -675,9 +677,9 @@ export default function RoomClient({
             {/* Waiting status when only one player */}
             {status === 'waiting' && (
               <motion.div
-                initial={{ opacity: 0, y: 8 }}
+                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+                transition={{ delay: shouldReduceMotion ? 0 : 0.3 }}
                 className="w-full px-6 py-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-sm text-center"
               >
                 Waiting for another player to join...
@@ -686,9 +688,9 @@ export default function RoomClient({
 
             {/* Leave Room */}
             <motion.button
-              initial={{ opacity: 0, y: 8 }}
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
+              transition={{ delay: shouldReduceMotion ? 0 : 0.4 }}
               onClick={handleLeaveRoom}
               disabled={loading === 'leave'}
               className="w-full px-6 py-3.5 rounded-xl bg-transparent hover:bg-[var(--color-danger-dim)] border border-[var(--color-border)] hover:border-[var(--color-danger)]/30 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
@@ -730,11 +732,12 @@ function PlayerCard({
   isWaiting?: boolean;
   delay?: number;
 }) {
+  const prefersReducedMotion = useReducedMotion();
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.3 }}
+      transition={{ delay: prefersReducedMotion ? 0 : delay, duration: prefersReducedMotion ? 0 : 0.3 }}
       className={`p-5 rounded-2xl border transition-colors ${
         isWaiting
           ? 'bg-[var(--color-surface)]/40 border-[var(--color-border)] border-dashed'

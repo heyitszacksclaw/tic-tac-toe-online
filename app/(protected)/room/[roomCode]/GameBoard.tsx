@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useSoundContext } from '@/app/providers/SoundProvider';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -54,41 +55,6 @@ interface GameBoardProps {
   completedAt: string | null;
 }
 
-// ─── Sound helpers ─────────────────────────────────────────────────────────
-
-function createBeep(frequency: number, duration: number, volume = 0.15): void {
-  try {
-    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'sine';
-    gainNode.gain.setValueAtTime(volume, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-    oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + duration);
-  } catch {
-    // Audio not available — silently ignore
-  }
-}
-
-function playMoveSound() { createBeep(440, 0.12); }
-function playWinSound() {
-  createBeep(523, 0.15);
-  setTimeout(() => createBeep(659, 0.15), 120);
-  setTimeout(() => createBeep(784, 0.25), 240);
-}
-function playLoseSound() {
-  createBeep(300, 0.2, 0.1);
-  setTimeout(() => createBeep(240, 0.3, 0.1), 180);
-}
-function playDrawSound() {
-  createBeep(392, 0.15);
-  setTimeout(() => createBeep(392, 0.15), 150);
-}
-
 // ─── Cell position labels ────────────────────────────────────────────────────
 
 function getCellLabel(index: number, value: string | null): string {
@@ -114,6 +80,22 @@ export default function GameBoard({
 }: GameBoardProps) {
   const [game, setGame] = useState<GameData>(initialGame);
 
+  // Sound context
+  const { muted, toggleMute, playSound } = useSoundContext();
+
+  // Reduced motion
+  const shouldReduceMotion = useReducedMotion();
+  const motionDuration = shouldReduceMotion ? 0 : undefined;
+
+  // Focus management refs
+  const playAgainRef = useRef<HTMLButtonElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const prevGameIdRef = useRef<string>(initialGame.id);
+
+  // ARIA live region
+  const [ariaAnnouncement, setAriaAnnouncement] = useState('');
+  const timerAnnouncedRef = useRef(false);
+
   // Sync game state when prop changes (e.g., new rematch game)
   useEffect(() => {
     if (initialGame.id !== game.id) {
@@ -134,7 +116,6 @@ export default function GameBoard({
 
   const [optimisticBoard, setOptimisticBoard] = useState<(string | null)[] | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(30);
-  const [muted, setMuted] = useState(false);
   const [forfeitDialog, setForfeitDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({});
@@ -342,17 +323,81 @@ export default function GameBoard({
     const moveKey = `move-${gameState.lastMoveIndex}-${gameState.moveCount}`;
     if (gameState.lastMoveIndex !== null && moveKey !== lastPlayedSound && !isGameOver) {
       setLastPlayedSound(moveKey);
-      playMoveSound();
+      playSound('move');
     }
-  }, [gameState.lastMoveIndex, gameState.moveCount, muted, isGameOver, lastPlayedSound]);
+  }, [gameState.lastMoveIndex, gameState.moveCount, muted, isGameOver, lastPlayedSound, playSound]);
 
   useEffect(() => {
     if (muted || !isGameOver || lastPlayedSound === `end-${game.id}`) return;
     setLastPlayedSound(`end-${game.id}`);
-    if (gameResult === 'win') playWinSound();
-    else if (gameResult === 'lose') playLoseSound();
-    else if (gameResult === 'draw') playDrawSound();
-  }, [isGameOver, gameResult, muted, game.id, lastPlayedSound]);
+    if (gameResult === 'win') playSound('win');
+    else if (gameResult === 'lose') playSound('lose');
+    else if (gameResult === 'draw') playSound('draw');
+  }, [isGameOver, gameResult, muted, game.id, lastPlayedSound, playSound]);
+
+  // ─── Focus management ──────────────────────────────────────────────────────
+
+  // Focus "Play Again" button when game ends
+  useEffect(() => {
+    if (isGameOver) {
+      // Small delay to let the result banner render
+      const timer = setTimeout(() => {
+        playAgainRef.current?.focus();
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [isGameOver]);
+
+  // Focus first empty cell when a rematch starts (game.id changes)
+  useEffect(() => {
+    if (prevGameIdRef.current !== game.id) {
+      prevGameIdRef.current = game.id;
+      // Small delay to let the board render
+      const timer = setTimeout(() => {
+        const firstEmpty = boardRef.current?.querySelector(
+          'button[role="gridcell"]:not([disabled])'
+        ) as HTMLButtonElement | null;
+        firstEmpty?.focus();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [game.id]);
+
+  // ─── ARIA announcements ────────────────────────────────────────────────────
+
+  // Announce turn changes
+  useEffect(() => {
+    if (isGameOver) return;
+    if (isMyTurn) {
+      setAriaAnnouncement('Your turn');
+    } else if (isOpponentTurn) {
+      setAriaAnnouncement(`${opponentProfile.display_name}'s turn`);
+    }
+  }, [isMyTurn, isOpponentTurn, isGameOver, opponentProfile.display_name]);
+
+  // Announce game results
+  useEffect(() => {
+    if (!isGameOver) return;
+    if (gameResult === 'win') setAriaAnnouncement('You win! Three in a row');
+    else if (gameResult === 'lose') setAriaAnnouncement('You lose');
+    else if (gameResult === 'draw') setAriaAnnouncement('Draw');
+  }, [isGameOver, gameResult]);
+
+  // Announce timer warning at 10 seconds (once per turn)
+  useEffect(() => {
+    if (isGameOver) {
+      timerAnnouncedRef.current = false;
+      return;
+    }
+    if (timeLeft === 10 && !timerAnnouncedRef.current) {
+      timerAnnouncedRef.current = true;
+      setAriaAnnouncement('10 seconds remaining');
+    }
+    // Reset announcement flag when a new turn starts (timer resets above 10)
+    if (timeLeft > 10) {
+      timerAnnouncedRef.current = false;
+    }
+  }, [timeLeft, isGameOver]);
 
   // ─── Actions ─────────────────────────────────────────────────────────────
 
@@ -505,6 +550,11 @@ export default function GameBoard({
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-bg)]">
+      {/* ARIA live region for screen reader announcements */}
+      <span className="sr-only" aria-live="assertive" role="status">
+        {ariaAnnouncement}
+      </span>
+
       {/* Header */}
       <header className="flex items-center justify-between px-5 sm:px-8 py-4 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-3">
@@ -521,7 +571,7 @@ export default function GameBoard({
         <div className="flex items-center gap-3">
           {/* Sound toggle (AV-8) */}
           <button
-            onClick={() => setMuted((m) => !m)}
+            onClick={toggleMute}
             className="p-2 rounded-lg hover:bg-[var(--color-surface)] transition-colors"
             title={muted ? 'Unmute sounds' : 'Mute sounds'}
             aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
@@ -556,10 +606,10 @@ export default function GameBoard({
       <AnimatePresence>
         {opponentLeftToast && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
+            initial={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={{ duration: motionDuration ?? 0.2 }}
             className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl bg-[var(--color-surface-light)] border border-[var(--color-border-strong)] text-sm font-medium shadow-[var(--shadow-lg)]"
           >
             Your opponent left — You win!
@@ -575,9 +625,9 @@ export default function GameBoard({
           <AnimatePresence>
             {isGameOver && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.9, y: -12 }}
+                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.9, y: -12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: motionDuration ?? 0.35, ease: [0.16, 1, 0.3, 1] }}
                 className="text-center p-6 rounded-2xl border"
                 style={{
                   background: `color-mix(in srgb, ${resultColor} 8%, var(--color-surface))`,
@@ -612,6 +662,7 @@ export default function GameBoard({
                   {/* Action buttons */}
                   <div className="flex gap-3 justify-center">
                     <button
+                      ref={playAgainRef}
                       onClick={handleRematchClick}
                       disabled={rematchLoading || iVoted || rematchCountdown === 0}
                       className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
@@ -651,9 +702,9 @@ export default function GameBoard({
           {/* Turn indicator + timer */}
           {!isGameOver && myTurnTimedOut && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: motionDuration ?? 0.25, ease: [0.16, 1, 0.3, 1] }}
               className="flex items-center justify-center gap-3 px-5 py-4 rounded-2xl border text-center"
               style={{
                 background: 'color-mix(in srgb, var(--color-danger) 8%, var(--color-surface))',
@@ -672,9 +723,9 @@ export default function GameBoard({
           {!isGameOver && !myTurnTimedOut && (
             <motion.div
               key={gameState.currentTurn}
-              initial={{ opacity: 0, y: 6 }}
+              initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: motionDuration ?? 0.2 }}
               className="flex items-center justify-between px-5 py-3.5 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border-strong)]"
             >
               <div className="flex items-center gap-3">
@@ -729,7 +780,7 @@ export default function GameBoard({
           <AnimatePresence>
             {error && (
               <motion.div
-                initial={{ opacity: 0, y: -4 }}
+                initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 className="px-4 py-3 rounded-xl bg-[var(--color-danger-dim)] border border-[var(--color-danger)]/20 text-[var(--color-danger)] text-sm text-center font-medium"
@@ -753,6 +804,7 @@ export default function GameBoard({
 
             {/* Board (card-elevated style) */}
             <div
+              ref={boardRef}
               className="flex-1 card-elevated p-4 sm:p-6 rounded-2xl"
               style={{
                 animation: !isGameOver && gameState.winningLine ? 'none' : undefined,
@@ -837,6 +889,7 @@ function ConfirmDialog({
   onCancel: () => void;
   isDanger?: boolean;
 }) {
+  const prefersReducedMotion = useReducedMotion();
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -847,10 +900,10 @@ function ConfirmDialog({
       onClick={onCancel}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.92, y: 16 }}
+        initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, scale: 0.92, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.92, y: 16 }}
-        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.92, y: 16 }}
+        transition={{ duration: prefersReducedMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
         className="card-elevated w-full max-w-sm rounded-2xl p-6 space-y-5"
         onClick={(e) => e.stopPropagation()}
       >
@@ -903,13 +956,14 @@ function GamePlayerPanel({
   isConnected: boolean;
   isMe: boolean;
 }) {
+  const prefersReducedMotion = useReducedMotion();
   const markColor = mark === 'X' ? 'var(--color-x)' : 'var(--color-o)';
   const markBg = mark === 'X' ? 'rgba(99,102,241,0.15)' : 'rgba(34,211,238,0.15)';
 
   return (
     <motion.div
-      animate={isActiveTurn ? { scale: 1.01 } : { scale: 1 }}
-      transition={{ duration: 0.2 }}
+      animate={isActiveTurn && !prefersReducedMotion ? { scale: 1.01 } : { scale: 1 }}
+      transition={{ duration: prefersReducedMotion ? 0 : 0.2 }}
       className={`
         lg:w-44 p-4 rounded-2xl border transition-all duration-200
         ${isActiveTurn
