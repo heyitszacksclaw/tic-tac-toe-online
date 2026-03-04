@@ -296,6 +296,11 @@ export default function RoomClient({
     try {
       const res = await fetch('/api/rooms/leave', { method: 'POST' });
       if (!res.ok) {
+        if (res.status === 429) {
+          setError("You're doing that too fast. Please wait a moment.");
+          setLoading(null);
+          return;
+        }
         const data = await res.json();
         setError(data.error || 'Failed to leave room.');
         setLoading(null);
@@ -354,6 +359,11 @@ export default function RoomClient({
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 429) {
+          setError("You're doing that too fast. Please wait a moment.");
+          setLoading(null);
+          return;
+        }
         setError(data.error || 'Failed to start game.');
         setLoading(null);
         return;
@@ -389,6 +399,10 @@ export default function RoomClient({
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 429) {
+          showToast("You're doing that too fast. Please wait a moment.");
+          return;
+        }
         showToast(data.error || 'Failed to request rematch.');
         return;
       }

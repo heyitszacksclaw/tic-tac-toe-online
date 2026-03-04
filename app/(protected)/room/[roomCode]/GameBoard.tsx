@@ -424,7 +424,11 @@ export default function GameBoard({
         if (!res.ok) {
           const data = await res.json();
           setOptimisticBoard(null); // Revert optimistic
-          setError(data.error || 'Move failed. Please try again.');
+          if (res.status === 429) {
+            setError("You're doing that too fast. Please wait a moment.");
+          } else {
+            setError(data.error || 'Move failed. Please try again.');
+          }
         }
         // Success: server broadcasts via postgres_changes, which sets new game state
       } catch {
@@ -448,6 +452,11 @@ export default function GameBoard({
         // If the game is already completed or has a winner, the realtime
         // subscription will pick up the final state — no action needed.
         if (res.status === 409) return;
+        if (res.status === 429) {
+          // Rate limited on timeout claim — allow retry
+          timeoutClaimedRef.current = false;
+          return;
+        }
         console.error('Timeout claim failed:', data.error);
         // Allow retry on next interval tick
         timeoutClaimedRef.current = false;
@@ -462,11 +471,14 @@ export default function GameBoard({
     setForfeitDialog(false);
     setShowNavGuardDialog(false);
     try {
-      await fetch('/api/game/forfeit', {
+      const res = await fetch('/api/game/forfeit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gameId: game.id }),
       });
+      if (!res.ok && res.status === 429) {
+        setError("You're doing that too fast. Please wait a moment.");
+      }
     } catch {
       setError('Failed to forfeit. Please try again.');
     }
@@ -477,8 +489,11 @@ export default function GameBoard({
     setRematchLoading(true);
     try {
       await onRematch();
-    } catch {
-      setError('Failed to request rematch.');
+    } catch (err) {
+      const message = err instanceof Error && err.message.includes('429')
+        ? "You're doing that too fast. Please wait a moment."
+        : 'Failed to request rematch.';
+      setError(message);
     } finally {
       setRematchLoading(false);
     }

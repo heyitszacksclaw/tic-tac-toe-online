@@ -103,6 +103,12 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
       const data = await res.json();
 
       if (!res.ok) {
+        // Handle rate limiting
+        if (res.status === 429) {
+          setError("You're doing that too fast. Please wait a moment.");
+          setLoading(null);
+          return;
+        }
         // If already in room, offer to return
         if (res.status === 409 && data.roomCode) {
           setActiveRoom({ roomCode: data.roomCode, roomId: '' });
@@ -143,6 +149,12 @@ export default function HomeClient({ user, profile }: HomeClientProps) {
       const data = await res.json();
 
       if (!res.ok) {
+        // Handle rate limiting
+        if (res.status === 429) {
+          setError("You're doing that too fast. Please wait a moment.");
+          setLoading(null);
+          return;
+        }
         if (res.status === 409 && data.roomCode) {
           setActiveRoom({ roomCode: data.roomCode, roomId: '' });
           setLoading(null);

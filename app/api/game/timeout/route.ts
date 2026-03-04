@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 async function incrementStat(
   admin: ReturnType<typeof createAdminClient>,
@@ -28,6 +29,15 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limit check
+    const { allowed } = await checkRateLimit(user.id, RATE_LIMITS.GAME_TIMEOUT);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please wait a moment and try again.' },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();
